@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scores de Seguridad - SSOMA</title>
+</head>
+<body>
+<h1>Scores de Seguridad</h1>
+
+<nav>
+    <a href="index.html">Inicio</a> |
+    <a href="personas.html">Personas</a> |
+    <a href="certificaciones.html">Certificaciones</a> |
+    <a href="salud.html">Salud</a> |
+    <a href="scores.html">Scores</a>
+</nav>
+
+<!-- Formulario -->
+<h2>Registrar Score de Seguridad</h2>
+<form id="scoreForm">
+    <input type="hidden" id="scoreId">
+
+    <label>Persona ID:</label>
+    <input type="text" id="personaId" required placeholder="UUID de la persona"><br><br>
+
+    <label>Puntuación (0-100):</label>
+    <input type="number" id="puntuacion" required min="0" max="100"><br><br>
+
+    <label>Fecha de Evaluación:</label>
+    <input type="date" id="fechaEvaluacion" required><br><br>
+
+    <label>Motivo del Cambio:</label>
+    <textarea id="motivoCambio" rows="3" placeholder="Describa el motivo del cambio de score..."></textarea><br><br>
+
+    <button type="submit">Guardar Score</button>
+    <button type="button" onclick="limpiarForm()">Limpiar</button>
+</form>
+
+<!-- Historial -->
+<h2>Historial de Scores</h2>
+<div id="promedioInfo"></div>
+
+<table border="1" style="width: 100%; margin-top: 20px;">
+    <thead>
+    <tr>
+        <th>Puntuación</th>
+        <th>Fecha Evaluación</th>
+        <th>Motivo</th>
+        <th>Acciones</th>
+    </tr>
+    </thead>
+    <tbody id="scoresTable">
+    <tr><td colspan="4">No hay scores registrados</td></tr>
+    </tbody>
+</table>
+
+<script>
+    const API_URL = 'http://localhost:8080/api/v1';
+    let personaSeleccionada = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const personaIdParam = urlParams.get('personaId');
+        if (personaIdParam) {
+            document.getElementById('personaId').value = personaIdParam;
+            personaSeleccionada = personaIdParam;
+            cargarHistorial();
+            calcularPromedio();
+        }
+
+        document.getElementById('scoreForm').onsubmit = function(e) {
+            e.preventDefault();
+            guardarScore();
+        };
+
+        // Fecha por defecto
+        document.getElementById('fechaEvaluacion').value = new Date().toISOString().split('T')[0];
+    });
+
+    async function guardarScore() {
+        const personaId = document.getElementById('personaId').value.trim();
+        const puntuacion = document.getElementById('puntuacion').value;
+        const fechaEvaluacion = document.getElementById('fechaEvaluacion').value;
+
+        if (!personaId || !puntuacion || !fechaEvaluacion) {
+            alert('Todos los campos son obligatorios');
+            return;
+        }
+
+        if (puntuacion < 0 || puntuacion > 100) {
+            alert('La puntuación debe estar entre 0 y 100');
+            return;
+        }
+
+        const score = {
+            personaId: personaId,
+            puntuacion: parseInt(puntuacion),
+            fechaEvaluacion: fechaEvaluacion,
+            motivoCambio: document.getElementById('motivoCambio').value.trim() || null
+        };
+
+        try {
+            const response = await fetch(`${API_URL}/scores-seguridad`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(score)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Score registrado exitosamente');
+                limpiarForm();
+
+                if (personaSeleccionada) {
+                    cargarHistorial();
+                    calcularPromedio();
+                }
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error guardando score');
+        }
+    }
+
+    async function cargarHistorial() {
+        const personaId = document.getElementById('personaId').value.trim();
+        if (!personaId) {
+            document.getElementById('scoresTable').innerHTML = '<tr><td colspan="4">Ingrese un Persona ID</td></tr>';
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/scores-seguridad/persona/${personaId}/historial`);
+            const data = await response.json();
+
+            if (data.success && data.data.length > 0) {
+                document.getElementById('scoresTable').innerHTML = data.data.map(score => `
+                    <tr>
+                        <td style="text-align: center; font-weight: bold;">${score.puntuacion}</td>
+                        <td>${formatDate(score.fechaEvaluacion)}</td>
+                        <td>${score.motivoCambio || '-'}</td>
+                        <td>
+                            <button onclick="editarScore('${score.scoreId}')">Editar</button>
+                            <button onclick="eliminarScore('${score.scoreId}')">Eliminar</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                document.getElementById('scoresTable').innerHTML = '<tr><td colspan="4">No hay scores registrados</td></tr>';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('scoresTable').innerHTML = '<tr><td colspan="4">Error cargando historial</td></tr>';
+        }
+    }
+
+    async function calcularPromedio() {
+        const personaId = document.getElementById('personaId').value.trim();
+        if (!personaId) return;
+
+        try {
+            const response = await fetch(`${API_URL}/scores-seguridad/persona/${personaId}/promedio`);
+            const data = await response.json();
+
+            if (data.success && data.data !== null) {
+                document.getElementById('promedioInfo').innerHTML = `
+                    <div style="background: #e7f3ff; padding: 10px; border: 1px solid #b3d9ff; margin-bottom: 15px;">
+                        <strong>Promedio de Seguridad: ${data.data.toFixed(2)} puntos</strong>
+                    </div>
+                `;
+            } else {
+                document.getElementById('promedioInfo').innerHTML = '';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    async function eliminarScore(scoreId) {
+        if (confirm('¿Eliminar este score?')) {
+            try {
+                const response = await fetch(`${API_URL}/scores-seguridad/${scoreId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Score eliminado');
+                    cargarHistorial();
+                    calcularPromedio();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error eliminando score');
+            }
+        }
+    }
+
+    async function editarScore(scoreId) {
+        try {
+            const response = await fetch(`${API_URL}/scores-seguridad/${scoreId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                const score = data.data;
+                document.getElementById('scoreId').value = score.scoreId;
+                document.getElementById('personaId').value = score.personaId;
+                document.getElementById('puntuacion').value = score.puntuacion;
+                document.getElementById('fechaEvaluacion').value = score.fechaEvaluacion;
+                document.getElementById('motivoCambio').value = score.motivoCambio || '';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error cargando score');
+        }
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        return new Date(dateString).toLocaleDateString('es-ES');
+    }
+
+    function limpiarForm() {
+        document.getElementById('scoreForm').reset();
+        document.getElementById('scoreId').value = '';
+        document.getElementById('fechaEvaluacion').value = new Date().toISOString().split('T')[0];
+
+        if (personaSeleccionada) {
+            document.getElementById('personaId').value = personaSeleccionada;
+        }
+    }
+</script>
+</body>
+</html>

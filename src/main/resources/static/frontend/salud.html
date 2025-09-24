@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salud - SSOMA</title>
+    <title>Información de Salud - SSOMA</title>
 </head>
 <body>
 <h1>Información de Salud</h1>
@@ -12,7 +12,8 @@
     <a href="index.html">Inicio</a> |
     <a href="personas.html">Personas</a> |
     <a href="certificaciones.html">Certificaciones</a> |
-    <a href="salud.html">Salud</a>
+    <a href="salud.html">Salud</a> |
+    <a href="scores.html">Scores</a>
 </nav>
 
 <!-- Formulario -->
@@ -47,37 +48,15 @@
     <button type="button" onclick="buscarSalud()">Buscar Info Existente</button>
 </form>
 
-<!-- Score de Seguridad -->
-<h2>Score de Seguridad</h2>
-<form id="scoreForm">
-    <input type="hidden" id="scoreId">
-
-    <label>Persona ID:</label>
-    <input type="text" id="scorePersonaId" required><br><br>
-
-    <label>Puntuación (0-100):</label>
-    <input type="number" id="puntuacion" required min="0" max="100"><br><br>
-
-    <label>Fecha de Evaluación:</label>
-    <input type="date" id="fechaEvaluacion" required><br><br>
-
-    <label>Motivo del Cambio:</label>
-    <textarea id="motivoCambio" rows="3"></textarea><br><br>
-
-    <button type="submit">Guardar Score</button>
-    <button type="button" onclick="verHistorialScores()">Ver Historial</button>
-</form>
-
-<!-- Historial -->
-<h2>Historial de Scores</h2>
-<div id="historialScores">
-    <p>No hay historial de scores.</p>
+<!-- Lista/Vista de información actual -->
+<h2>Información Actual</h2>
+<div id="infoActual">
+    <p>No hay información de salud cargada.</p>
 </div>
 
 <script>
     const API_URL = 'http://localhost:8080/api/v1';
     let editandoSalud = false;
-    let editandoScore = false;
     let personaSeleccionada = null;
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -85,31 +64,78 @@
         const personaIdParam = urlParams.get('personaId');
         if (personaIdParam) {
             document.getElementById('personaId').value = personaIdParam;
-            document.getElementById('scorePersonaId').value = personaIdParam;
             personaSeleccionada = personaIdParam;
             buscarSalud();
-            verHistorialScores();
         }
 
         document.getElementById('saludForm').onsubmit = function(e) {
             e.preventDefault();
             guardarSalud();
         };
-
-        document.getElementById('scoreForm').onsubmit = function(e) {
-            e.preventDefault();
-            guardarScore();
-        };
-
-        document.getElementById('fechaEvaluacion').value = new Date().toISOString().split('T')[0];
     });
 
+    async function buscarSalud() {
+        const personaId = document.getElementById('personaId').value.trim();
+
+        if (!personaId) {
+            alert('Por favor ingrese un Persona ID');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/salud-personas/persona/${personaId}`);
+
+            if (response.ok) {
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    const salud = data.data;
+                    document.getElementById('saludId').value = salud.saludId;
+                    document.getElementById('grupoSanguineo').value = salud.grupoSanguineo || '';
+                    document.getElementById('alergias').value = salud.alergias || '';
+                    document.getElementById('historialMedico').value = salud.historialMedico || '';
+
+                    mostrarInfoActual(salud);
+                    editandoSalud = true;
+                    alert('Información de salud encontrada y cargada');
+                } else {
+                    document.getElementById('infoActual').innerHTML = '<p>No existe información de salud para esta persona.</p>';
+                    editandoSalud = false;
+                }
+            } else {
+                document.getElementById('infoActual').innerHTML = '<p>No existe información de salud para esta persona.</p>';
+                editandoSalud = false;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error de conexión: ' + error.message);
+        }
+    }
+
+    function mostrarInfoActual(salud) {
+        document.getElementById('infoActual').innerHTML = `
+            <div style="border: 1px solid #ddd; padding: 15px; background: #f9f9f9;">
+                <h3>Información de Salud Actual</h3>
+                <p><strong>Grupo Sanguíneo:</strong> ${salud.grupoSanguineo || 'No especificado'}</p>
+                <p><strong>Alergias:</strong> ${salud.alergias || 'Ninguna registrada'}</p>
+                <p><strong>Historial Médico:</strong> ${salud.historialMedico || 'Sin historial registrado'}</p>
+            </div>
+        `;
+    }
+
     async function guardarSalud() {
+        const personaId = document.getElementById('personaId').value.trim();
+
+        if (!personaId) {
+            alert('El Persona ID es obligatorio');
+            return;
+        }
+
         const salud = {
-            personaId: document.getElementById('personaId').value,
+            personaId: personaId,
             grupoSanguineo: document.getElementById('grupoSanguineo').value || null,
-            alergias: document.getElementById('alergias').value || null,
-            historialMedico: document.getElementById('historialMedico').value || null
+            alergias: document.getElementById('alergias').value.trim() || null,
+            historialMedico: document.getElementById('historialMedico').value.trim() || null
         };
 
         try {
@@ -132,8 +158,12 @@
             const data = await response.json();
 
             if (data.success) {
-                alert(editandoSalud ? 'Información actualizada' : 'Información creada');
-                editandoSalud = true;
+                alert(editandoSalud ? 'Información actualizada exitosamente' : 'Información creada exitosamente');
+                if (!editandoSalud) {
+                    editandoSalud = true;
+                    document.getElementById('saludId').value = data.data.saludId;
+                }
+                mostrarInfoActual(data.data);
             } else {
                 alert('Error: ' + data.message);
             }
@@ -143,77 +173,10 @@
         }
     }
 
-    async function guardarScore() {
-        const score = {
-            personaId: document.getElementById('scorePersonaId').value,
-            puntuacion: parseInt(document.getElementById('puntuacion').value),
-            fechaEvaluacion: document.getElementById('fechaEvaluacion').value,
-            motivoCambio: document.getElementById('motivoCambio').value || null
-        };
-
-        try {
-            const response = await fetch(`${API_URL}/scores-seguridad`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(score)
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                alert('Score creado');
-                document.getElementById('scoreForm').reset();
-                document.getElementById('fechaEvaluacion').value = new Date().toISOString().split('T')[0];
-                if (personaSeleccionada) {
-                    document.getElementById('scorePersonaId').value = personaSeleccionada;
-                }
-                verHistorialScores();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Error guardando score');
-        }
-    }
-
-    async function verHistorialScores() {
-        const personaId = document.getElementById('scorePersonaId').value;
-        if (!personaId) return;
-
-        try {
-            const response = await fetch(`${API_URL}/scores-seguridad/persona/${personaId}/historial`);
-            const data = await response.json();
-
-            if (data.success && data.data.length > 0) {
-                const historialDiv = document.getElementById('historialScores');
-                historialDiv.innerHTML = `
-                    <table border="1">
-                        <thead>
-                            <tr><th>Puntuación</th><th>Fecha</th><th>Motivo</th></tr>
-                        </thead>
-                        <tbody>
-                            ${data.data.map(score => `
-                                <tr>
-                                    <td>${score.puntuacion}</td>
-                                    <td>${new Date(score.fechaEvaluacion).toLocaleDateString('es-ES')}</td>
-                                    <td>${score.motivoCambio || '-'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-            } else {
-                document.getElementById('historialScores').innerHTML = '<p>No hay scores registrados.</p>';
-            }
-        } catch (error) {
-            console.error('Error:', error);
-        }
-    }
-
     function limpiarForm() {
         document.getElementById('saludForm').reset();
         document.getElementById('saludId').value = '';
+        document.getElementById('infoActual').innerHTML = '<p>No hay información de salud cargada.</p>';
         if (personaSeleccionada) {
             document.getElementById('personaId').value = personaSeleccionada;
         }

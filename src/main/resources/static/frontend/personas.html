@@ -12,7 +12,8 @@
     <a href="index.html">Inicio</a> |
     <a href="personas.html">Personas</a> |
     <a href="certificaciones.html">Certificaciones</a> |
-    <a href="salud.html">Salud</a>
+    <a href="salud.html">Salud</a> |
+    <a href="scores.html">Scores</a>
 </nav>
 
 <!-- Formulario -->
@@ -102,6 +103,11 @@
             e.preventDefault();
             guardarPersona();
         };
+
+        // Establecer fecha por defecto: hace 25 años
+        const fechaDefecto = new Date();
+        fechaDefecto.setFullYear(fechaDefecto.getFullYear() - 25);
+        document.getElementById('fechaNacimiento').value = fechaDefecto.toISOString().split('T')[0];
     });
 
     async function cargarPersonas() {
@@ -124,6 +130,7 @@
                             <button onclick="eliminarPersona('${persona.personaId}')">Eliminar</button>
                             <button onclick="verCertificaciones('${persona.personaId}')">Certificaciones</button>
                             <button onclick="verSalud('${persona.personaId}')">Salud</button>
+                            <button onclick="verScores('${persona.personaId}')">Scores</button>
                         </td>
                     </tr>
                 `).join('');
@@ -137,15 +144,37 @@
     }
 
     async function guardarPersona() {
+        const empresaId = document.getElementById('empresaId').value.trim();
+        const dni = document.getElementById('dni').value.trim();
+        const nombreCompleto = document.getElementById('nombreCompleto').value.trim();
+
+        if (!empresaId || !dni || !nombreCompleto) {
+            alert('Por favor complete los campos obligatorios');
+            return;
+        }
+
+        // Validar formato de UUID básico
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(empresaId)) {
+            alert('El formato del ID de empresa no es válido');
+            return;
+        }
+
+        // Validar DNI
+        if (!/^\d{8}$/.test(dni)) {
+            alert('El DNI debe tener exactamente 8 dígitos');
+            return;
+        }
+
         const persona = {
-            empresaId: document.getElementById('empresaId').value,
+            empresaId: empresaId,
             tipoPersona: document.getElementById('tipoPersona').value,
-            nombreCompleto: document.getElementById('nombreCompleto').value,
-            dni: document.getElementById('dni').value,
+            nombreCompleto: nombreCompleto,
+            dni: dni,
             fechaNacimiento: document.getElementById('fechaNacimiento').value || null,
             genero: document.getElementById('genero').value || null,
-            telefono: document.getElementById('telefono').value || null,
-            correo: document.getElementById('correo').value || null
+            telefono: document.getElementById('telefono').value.trim() || null,
+            correo: document.getElementById('correo').value.trim() || null
         };
 
         try {
@@ -168,7 +197,7 @@
             const data = await response.json();
 
             if (data.success) {
-                alert(editando ? 'Persona actualizada' : 'Persona creada');
+                alert(editando ? 'Persona actualizada exitosamente' : 'Persona creada exitosamente');
                 limpiarForm();
                 cargarPersonas();
             } else {
@@ -206,7 +235,7 @@
     }
 
     async function eliminarPersona(id) {
-        if (confirm('¿Eliminar persona?')) {
+        if (confirm('¿Eliminar persona? Esta acción también eliminará toda su información relacionada (salud, scores, certificaciones).')) {
             try {
                 const response = await fetch(`${API_URL}/personas/${id}`, {
                     method: 'DELETE'
@@ -215,7 +244,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    alert('Persona eliminada');
+                    alert('Persona eliminada exitosamente');
                     cargarPersonas();
                 } else {
                     alert('Error: ' + data.message);
@@ -227,6 +256,7 @@
         }
     }
 
+    // ENLACES A PÁGINAS ESPECÍFICAS
     function verCertificaciones(personaId) {
         window.location.href = `certificaciones.html?personaId=${personaId}`;
     }
@@ -235,13 +265,76 @@
         window.location.href = `salud.html?personaId=${personaId}`;
     }
 
+    function verScores(personaId) {
+        window.location.href = `scores.html?personaId=${personaId}`;
+    }
+
     function limpiarForm() {
         document.getElementById('personaForm').reset();
         document.getElementById('personaId').value = '';
+
+        // Establecer fecha por defecto: hace 25 años
+        const fechaDefecto = new Date();
+        fechaDefecto.setFullYear(fechaDefecto.getFullYear() - 25);
+        document.getElementById('fechaNacimiento').value = fechaDefecto.toISOString().split('T')[0];
+
         editando = false;
     }
 
-    // Resto de funciones de filtros...
+    // FUNCIONES DE FILTROS
+    async function aplicarFiltros() {
+        const tipo = document.getElementById('filtroTipo').value;
+        if (tipo) {
+            try {
+                const response = await fetch(`${API_URL}/personas/tipo/${tipo}`);
+                const data = await response.json();
+                mostrarPersonasFiltradas(data.success ? data.data : []);
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        } else {
+            cargarPersonas();
+        }
+    }
+
+    async function buscarPersonas() {
+        const nombre = document.getElementById('searchNombre').value.trim();
+        if (nombre.length > 2) {
+            try {
+                const response = await fetch(`${API_URL}/personas/buscar?nombre=${encodeURIComponent(nombre)}`);
+                const data = await response.json();
+                mostrarPersonasFiltradas(data.success ? data.data : []);
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        } else if (nombre.length === 0) {
+            cargarPersonas();
+        }
+    }
+
+    function mostrarPersonasFiltradas(personas) {
+        const tbody = document.getElementById('personasTable');
+        if (personas.length > 0) {
+            tbody.innerHTML = personas.map(persona => `
+                <tr>
+                    <td>${persona.dni}</td>
+                    <td>${persona.nombreCompleto}</td>
+                    <td>${persona.tipoPersona}</td>
+                    <td>${persona.telefono || '-'}</td>
+                    <td>${persona.correo || '-'}</td>
+                    <td>
+                        <button onclick="editarPersona('${persona.personaId}')">Editar</button>
+                        <button onclick="eliminarPersona('${persona.personaId}')">Eliminar</button>
+                        <button onclick="verCertificaciones('${persona.personaId}')">Certificaciones</button>
+                        <button onclick="verSalud('${persona.personaId}')">Salud</button>
+                        <button onclick="verScores('${persona.personaId}')">Scores</button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6">No se encontraron personas</td></tr>';
+        }
+    }
 </script>
 </body>
 </html>
