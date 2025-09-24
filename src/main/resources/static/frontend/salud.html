@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salud - SSOMA</title>
+</head>
+<body>
+<h1>Información de Salud</h1>
+
+<nav>
+    <a href="index.html">Inicio</a> |
+    <a href="personas.html">Personas</a> |
+    <a href="certificaciones.html">Certificaciones</a> |
+    <a href="salud.html">Salud</a>
+</nav>
+
+<!-- Formulario -->
+<h2>Crear/Editar Información de Salud</h2>
+<form id="saludForm">
+    <input type="hidden" id="saludId">
+
+    <label>Persona ID:</label>
+    <input type="text" id="personaId" required placeholder="UUID de la persona"><br><br>
+
+    <label>Grupo Sanguíneo:</label>
+    <select id="grupoSanguineo">
+        <option value="">Seleccione grupo</option>
+        <option value="A+">A+</option>
+        <option value="A-">A-</option>
+        <option value="B+">B+</option>
+        <option value="B-">B-</option>
+        <option value="AB+">AB+</option>
+        <option value="AB-">AB-</option>
+        <option value="O+">O+</option>
+        <option value="O-">O-</option>
+    </select><br><br>
+
+    <label>Alergias:</label>
+    <textarea id="alergias" rows="3" placeholder="Describa las alergias conocidas..."></textarea><br><br>
+
+    <label>Historial Médico:</label>
+    <textarea id="historialMedico" rows="5" placeholder="Historial médico relevante..."></textarea><br><br>
+
+    <button type="submit">Guardar</button>
+    <button type="button" onclick="limpiarForm()">Limpiar</button>
+    <button type="button" onclick="buscarSalud()">Buscar Info Existente</button>
+</form>
+
+<!-- Score de Seguridad -->
+<h2>Score de Seguridad</h2>
+<form id="scoreForm">
+    <input type="hidden" id="scoreId">
+
+    <label>Persona ID:</label>
+    <input type="text" id="scorePersonaId" required><br><br>
+
+    <label>Puntuación (0-100):</label>
+    <input type="number" id="puntuacion" required min="0" max="100"><br><br>
+
+    <label>Fecha de Evaluación:</label>
+    <input type="date" id="fechaEvaluacion" required><br><br>
+
+    <label>Motivo del Cambio:</label>
+    <textarea id="motivoCambio" rows="3"></textarea><br><br>
+
+    <button type="submit">Guardar Score</button>
+    <button type="button" onclick="verHistorialScores()">Ver Historial</button>
+</form>
+
+<!-- Historial -->
+<h2>Historial de Scores</h2>
+<div id="historialScores">
+    <p>No hay historial de scores.</p>
+</div>
+
+<script>
+    const API_URL = 'http://localhost:8080/api/v1';
+    let editandoSalud = false;
+    let editandoScore = false;
+    let personaSeleccionada = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const personaIdParam = urlParams.get('personaId');
+        if (personaIdParam) {
+            document.getElementById('personaId').value = personaIdParam;
+            document.getElementById('scorePersonaId').value = personaIdParam;
+            personaSeleccionada = personaIdParam;
+            buscarSalud();
+            verHistorialScores();
+        }
+
+        document.getElementById('saludForm').onsubmit = function(e) {
+            e.preventDefault();
+            guardarSalud();
+        };
+
+        document.getElementById('scoreForm').onsubmit = function(e) {
+            e.preventDefault();
+            guardarScore();
+        };
+
+        document.getElementById('fechaEvaluacion').value = new Date().toISOString().split('T')[0];
+    });
+
+    async function guardarSalud() {
+        const salud = {
+            personaId: document.getElementById('personaId').value,
+            grupoSanguineo: document.getElementById('grupoSanguineo').value || null,
+            alergias: document.getElementById('alergias').value || null,
+            historialMedico: document.getElementById('historialMedico').value || null
+        };
+
+        try {
+            let response;
+            if (editandoSalud) {
+                const id = document.getElementById('saludId').value;
+                response = await fetch(`${API_URL}/salud-personas/${id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(salud)
+                });
+            } else {
+                response = await fetch(`${API_URL}/salud-personas`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(salud)
+                });
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert(editandoSalud ? 'Información actualizada' : 'Información creada');
+                editandoSalud = true;
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error guardando información de salud');
+        }
+    }
+
+    async function guardarScore() {
+        const score = {
+            personaId: document.getElementById('scorePersonaId').value,
+            puntuacion: parseInt(document.getElementById('puntuacion').value),
+            fechaEvaluacion: document.getElementById('fechaEvaluacion').value,
+            motivoCambio: document.getElementById('motivoCambio').value || null
+        };
+
+        try {
+            const response = await fetch(`${API_URL}/scores-seguridad`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(score)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Score creado');
+                document.getElementById('scoreForm').reset();
+                document.getElementById('fechaEvaluacion').value = new Date().toISOString().split('T')[0];
+                if (personaSeleccionada) {
+                    document.getElementById('scorePersonaId').value = personaSeleccionada;
+                }
+                verHistorialScores();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error guardando score');
+        }
+    }
+
+    async function verHistorialScores() {
+        const personaId = document.getElementById('scorePersonaId').value;
+        if (!personaId) return;
+
+        try {
+            const response = await fetch(`${API_URL}/scores-seguridad/persona/${personaId}/historial`);
+            const data = await response.json();
+
+            if (data.success && data.data.length > 0) {
+                const historialDiv = document.getElementById('historialScores');
+                historialDiv.innerHTML = `
+                    <table border="1">
+                        <thead>
+                            <tr><th>Puntuación</th><th>Fecha</th><th>Motivo</th></tr>
+                        </thead>
+                        <tbody>
+                            ${data.data.map(score => `
+                                <tr>
+                                    <td>${score.puntuacion}</td>
+                                    <td>${new Date(score.fechaEvaluacion).toLocaleDateString('es-ES')}</td>
+                                    <td>${score.motivoCambio || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                document.getElementById('historialScores').innerHTML = '<p>No hay scores registrados.</p>';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    function limpiarForm() {
+        document.getElementById('saludForm').reset();
+        document.getElementById('saludId').value = '';
+        if (personaSeleccionada) {
+            document.getElementById('personaId').value = personaSeleccionada;
+        }
+        editandoSalud = false;
+    }
+</script>
+</body>
+</html>

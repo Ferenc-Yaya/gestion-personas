@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Personas - SSOMA</title>
+</head>
+<body>
+<h1>Sistema de Gestión de Personas</h1>
+
+<nav>
+    <a href="index.html">Inicio</a> |
+    <a href="personas.html">Personas</a> |
+    <a href="certificaciones.html">Certificaciones</a> |
+    <a href="salud.html">Salud</a>
+</nav>
+
+<h2>Menú Principal</h2>
+<ul>
+    <li><a href="personas.html">Gestionar Personas</a></li>
+    <li><a href="certificaciones.html">Gestionar Certificaciones</a></li>
+    <li><a href="salud.html">Información de Salud</a></li>
+</ul>
+
+<div id="stats">
+    <h3>Resumen</h3>
+    <p>Total Personas: <span id="totalPersonas">-</span></p>
+    <p>Total Certificaciones: <span id="totalCertificaciones">-</span></p>
+    <p>Certificaciones Vencidas: <span id="certificacionesVencidas">-</span></p>
+</div>
+
+<script src="app.js"></script>
+<script>
+    window.onload = async function() {
+        try {
+            const personas = await fetch('http://localhost:8080/api/v1/personas?page=0&size=1');
+            const personasData = await personas.json();
+            document.getElementById('totalPersonas').textContent = personasData.data?.totalElements || 0;
+
+            const vencidas = await fetch('http://localhost:8080/api/v1/certificaciones/vencidas');
+            const vencidasData = await vencidas.json();
+            document.getElementById('certificacionesVencidas').textContent = vencidasData.data?.length || 0;
+
+            document.getElementById('totalCertificaciones').textContent = '-';
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    };
+</script>
+</body>
+</html>

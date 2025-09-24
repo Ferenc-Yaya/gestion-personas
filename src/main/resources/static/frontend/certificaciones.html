@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificaciones - SSOMA</title>
+</head>
+<body>
+<h1>Gestión de Certificaciones</h1>
+
+<nav>
+    <a href="index.html">Inicio</a> |
+    <a href="personas.html">Personas</a> |
+    <a href="certificaciones.html">Certificaciones</a> |
+    <a href="salud.html">Salud</a>
+</nav>
+
+<!-- Formulario -->
+<h2>Crear/Editar Certificación</h2>
+<form id="certificacionForm">
+    <input type="hidden" id="certificacionId">
+
+    <label>Persona ID:</label>
+    <input type="text" id="personaId" required placeholder="UUID de la persona"><br><br>
+
+    <label>Nombre de Certificación:</label>
+    <input type="text" id="nombreCertificacion" required><br><br>
+
+    <label>Fecha de Emisión:</label>
+    <input type="date" id="fechaEmision"><br><br>
+
+    <label>Fecha de Vencimiento:</label>
+    <input type="date" id="fechaVencimiento"><br><br>
+
+    <button type="submit">Guardar</button>
+    <button type="button" onclick="limpiarForm()">Limpiar</button>
+</form>
+
+<!-- Filtros -->
+<h2>Filtros</h2>
+<button onclick="mostrarVencidas()">Ver Vencidas</button>
+<button onclick="mostrarPorVencer()">Por Vencer (30 días)</button>
+<button onclick="cargarCertificaciones()">Ver Todas</button>
+
+<!-- Lista -->
+<h2>Lista de Certificaciones</h2>
+<button onclick="cargarCertificaciones()">Actualizar Lista</button>
+
+<table border="1">
+    <thead>
+    <tr>
+        <th>Certificación</th>
+        <th>Fecha Emisión</th>
+        <th>Fecha Vencimiento</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+    </tr>
+    </thead>
+    <tbody id="certificacionesTable">
+    <tr><td colspan="5">Cargando...</td></tr>
+    </tbody>
+</table>
+
+<script>
+    const API_URL = 'http://localhost:8080/api/v1';
+    let editando = false;
+    let personaSeleccionada = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const personaIdParam = urlParams.get('personaId');
+        if (personaIdParam) {
+            document.getElementById('personaId').value = personaIdParam;
+            personaSeleccionada = personaIdParam;
+            cargarCertificacionesPorPersona(personaIdParam);
+        } else {
+            cargarCertificaciones();
+        }
+
+        document.getElementById('certificacionForm').onsubmit = function(e) {
+            e.preventDefault();
+            guardarCertificacion();
+        };
+    });
+
+    async function cargarCertificaciones() {
+        const tbody = document.getElementById('certificacionesTable');
+        tbody.innerHTML = '<tr><td colspan="5">Use los filtros o ingrese un Persona ID</td></tr>';
+    }
+
+    async function cargarCertificacionesPorPersona(personaId) {
+        try {
+            const response = await fetch(`${API_URL}/certificaciones/persona/${personaId}`);
+            const data = await response.json();
+
+            mostrarCertificaciones(data.success ? data.data : []);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error cargando certificaciones');
+        }
+    }
+
+    function mostrarCertificaciones(certificaciones) {
+        const tbody = document.getElementById('certificacionesTable');
+
+        if (certificaciones.length > 0) {
+            tbody.innerHTML = certificaciones.map(cert => {
+                const estado = getEstadoCertificacion(cert.fechaVencimiento);
+                return `
+                    <tr>
+                        <td>${cert.nombreCertificacion}</td>
+                        <td>${formatDate(cert.fechaEmision)}</td>
+                        <td>${formatDate(cert.fechaVencimiento)}</td>
+                        <td>${estado}</td>
+                        <td>
+                            <button onclick="editarCertificacion('${cert.certificacionId}')">Editar</button>
+                            <button onclick="eliminarCertificacion('${cert.certificacionId}')">Eliminar</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5">No hay certificaciones</td></tr>';
+        }
+    }
+
+    function getEstadoCertificacion(fechaVencimiento) {
+        if (!fechaVencimiento) return 'Sin vencimiento';
+
+        const hoy = new Date();
+        const vencimiento = new Date(fechaVencimiento);
+
+        if (vencimiento < hoy) return '🔴 Vencida';
+
+        const dias = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+        if (dias <= 30) return '🟡 Por vencer';
+
+        return '🟢 Vigente';
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        return new Date(dateString).toLocaleDateString('es-ES');
+    }
+
+    async function guardarCertificacion() {
+        const certificacion = {
+            personaId: document.getElementById('personaId').value,
+            nombreCertificacion: document.getElementById('nombreCertificacion').value,
+            fechaEmision: document.getElementById('fechaEmision').value || null,
+            fechaVencimiento: document.getElementById('fechaVencimiento').value || null
+        };
+
+        try {
+            let response;
+            if (editando) {
+                const id = document.getElementById('certificacionId').value;
+                response = await fetch(`${API_URL}/certificaciones/${id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(certificacion)
+                });
+            } else {
+                response = await fetch(`${API_URL}/certificaciones`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(certificacion)
+                });
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert(editando ? 'Certificación actualizada' : 'Certificación creada');
+                limpiarForm();
+
+                if (personaSeleccionada) {
+                    cargarCertificacionesPorPersona(personaSeleccionada);
+                }
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error guardando certificación');
+        }
+    }
+
+    async function mostrarVencidas() {
+        try {
+            const response = await fetch(`${API_URL}/certificaciones/vencidas`);
+            const data = await response.json();
+
+            if (data.success) {
+                mostrarCertificaciones(data.data);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    async function mostrarPorVencer() {
+        try {
+            const response = await fetch(`${API_URL}/certificaciones/proximas-vencer?diasAntesVencimiento=30`);
+            const data = await response.json();
+
+            if (data.success) {
+                mostrarCertificaciones(data.data);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    function limpiarForm() {
+        document.getElementById('certificacionForm').reset();
+        document.getElementById('certificacionId').value = '';
+        if (personaSeleccionada) {
+            document.getElementById('personaId').value = personaSeleccionada;
+        }
+        editando = false;
+    }
+</script>
+</body>
+</html>
